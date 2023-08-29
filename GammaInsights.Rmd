@@ -28,12 +28,9 @@ In general, when thinking about modelling positive continuous values, most peopl
 
 Continuous strictly positive data are ubiquitous in most sciences, in particular in ecology and evolution. Concentrations, weights, lengths, distances and speeds are just a handful of examples. These are often modeled with the standard linear model which assumed Gaussian residuals. If the mean response is not close to zero and the residuals are symmetric and homocedastic, that might be the preferred option. However, under many circumstances, especially for variables which have means close to zero, and hence are bounded close to their mean, the Gaussian will often prove unsuitable.
 
-In a Gamma GLM the linear predictor gives us the mean of a Gamma for a set of covariates. This is estimated correctly via the GLM maximum likelihood. However, it does not provide a maximum likelihood estimate (MLE) for the dispersion parameter. Nonetheless, the library `MASS` has a couple of functions that can be used over a GLM object to obtain MLE's for said parameter:
+Most people when implementing regression models tend to choose a response family and stick with it without really looking at goodness of fit, but that choice might have implications on the inferences made. There are not many dedicated references to choosing amongts different families (but see @Lindsey1998 for an exception in the medical literature).
 
-* `gamma.shape` - estimates the shape parameter
-* `gamma.dispersion` - estimates the inverse of the shape parameter, that is, the dispersion parameter
-
-Here we consider the Gamma regression and provide recommendations about its use. That is of course if we manage to understand it. As it turns out, there is more than meets the eye behind the Gamma and how to parametrize it for a GLM. Therefore, before looking at their use in a GLM setting, we describe the diferent parametrizations that might be considered.
+In a Gamma GLM the linear predictor gives us the mean of a Gamma for a set of covariates. Here we consider the Gamma regression and provide recommendations about its use. That is of course if we manage to understand it. As it turns out, there is more than meets the eye behind the Gamma and how to parametrize it for a GLM. Therefore, before looking at their use in a GLM setting, we describe the diferent parametrizations that might be considered.
 
 # Gamma parametrizations
 
@@ -107,7 +104,7 @@ phi1 <- 0.2
 phi2 <- 2
 ```
 
-As examples, consider Gammas with dispersion parameter $\phi_1$=`r phi1` and $\phi_2$=`r phi2`
+As a couple of illustrative examples, consider Gammas with a dispersion parameter either below or above one, that is $\phi_1$=`r phi1` and $\phi_2$=`r phi2`, respectively.
 
 ```{r}
 par(mfrow=c(2,2),mar = c(4, 4, 1, 4) + 0.3)
@@ -184,7 +181,7 @@ Note that by fixing the mean and the dispersion, a given mean can be obtained vi
 
 ## Constant variance
 
-Given what I struggled with the gamma implementation for the sperm whale cue rate model, I actually arrived at another possible paramnetrization for the gama. One where the variance is not dependent on the mean.
+Given what I struggled with the gamma implementation for the sperm whale cue rate model, I actually arrived at another possible parameterization for the Gamma: one where the variance is not dependent on the mean.
 
 The way to parameterize a GLM might be to define the mean $\mu$ and the $\sigma^2$, resulting in dynamic values (since they depend now on both $\mu$ and $\sigma^2$) for $\alpha$ (shape) and $\beta$ (rate) parameters  $\frac{\mu^2}{\sigma^2}$ and $\frac{\mu}{\sigma^2}$, respectively.
 
@@ -321,7 +318,10 @@ v<-10
 ```
 
 
-Based on observations of a Gamma, we can estimate the parameters of a gamma distribution, which is akin to fitting a gamma distribution to the data, using the `glm` function. This is essentially a regression model without any independent covariates.
+Based on observations of a Gamma, we can estimate the parameters of a gamma distribution, which is akin to fitting a gamma distribution to the data, using the `glm` function. This is essentially a regression model without any independent covariates. Note that while the mean is estimated correctly via the `glm` maximum likelihood, the reported estimated dispersion in the `glm` output in not a maximum likelihood estimate (MLE). Nonetheless, the library `MASS` has a couple of functions that can be used over a GLM object to obtain MLE's for said parameter:
+
+* `gamma.shape` - estimates the shape parameter
+* `gamma.dispersion` - estimates the inverse of the shape parameter, that is, the dispersion parameter
 
 An example follows. Suppose we have a gamma with mean=`r m` and variance=`r v`. Given the above, that corresponds to a shape of `r round(m^2/v,2)`, a scale of `r round(v/m,2)`, a rate of `r round(m/v,2)` and a dispersion of `r round(v/m^2,2)`.
 
@@ -800,45 +800,21 @@ with the inverse link
 summary(glm3)
 ```
 
-# Resources to explore
+# Resources to explore further
 
-Should read this:
+Some reources to explor further check if improving this material at some point.
 
-https://data.library.virginia.edu/getting-started-with-gamma-regression/ - very nice resource but, it states "If you look carefully at the variance, you’ll notice it’s the mean multiplied by the scale parameter. In other words, the variance is a function of the mean. A gamma distribution with a higher mean will have higher variance.". As we have seen above, this is not the case. If the scale $\beta<1$, the variance could be lower than the mean. Here follows an example for illustration where a given gamma has variance lower than the mean
+* A gentle introduction to gamma regression can be found here: https://data.library.virginia.edu/getting-started-with-gamma-regression/ and the authors provide also a dataset of house prices which can be used to illustrate Gamma regression. I have saved a copy of the data hosted here http://static.lib.virginia.edu/statlab/materials/data/alb_homes.csv  in case I want to use it later and it is removed from the site.
 
-```{r}
-dados<-rgamma(1000,shape=3,scale=0.4)
-mean(dados)
-var(dados)
-```
+* https://rpubs.com/jwesner/gamma_glm - Fit and interpret a Bayesian Generalized Linear Model with a Gamma likelihood in `brms()`, by Jeff Wesner. Very nice worked example
 
-But can one cook up an example of a regression where the variance decreases with the mean? I could not, actually... and that is because in a regression context, the variance can be lower than the mean, but it must increase with the mean.
+https://seananderson.ca/2014/04/08/gamma-glms/ - A nice intro by https://seananderson.ca/. One should never forget: "There are multiple ways to parameterize the Gamma distribution, so it’s important to pay attention when moving between languages and functions."
 
-https://rpubs.com/jwesner/gamma_glm
+* about link functions in the Gamma, see https://stats.stackexchange.com/questions/202570/link-function-in-a-gamma-distribution-glm and https://stats.stackexchange.com/questions/484366/gamma-glm-why-log-link-is-more-common-than-canonical-link
 
-And also these:
-
-https://stats.stackexchange.com/questions/77579/log-linked-gamma-glm-vs-log-linked-gaussian-glm-vs-log-transformed-lm
-
-https://stats.stackexchange.com/questions/47840/linear-model-with-log-transformed-response-vs-generalized-linear-model-with-log
-
-http://faculty.washington.edu/heagerty/Courses/b571/homework/Lindsey-Jones-1998.pdf
-
-https://data.library.virginia.edu/getting-started-with-gamma-regression/
+* If linking to log-log weight-length regressions, e.g. see https://stats.stackexchange.com/questions/77579/log-linked-gamma-glm-vs-log-linked-gaussian-glm-vs-log-transformed-lm or https://stats.stackexchange.com/questions/47840/linear-model-with-log-transformed-response-vs-generalized-linear-model-with-log. Relation with log-normal GLM:
 
 
-about the inverse link:
-
-https://stats.stackexchange.com/questions/202570/link-function-in-a-gamma-distribution-glm
-
-https://stats.stackexchange.com/questions/484366/gamma-glm-why-log-link-is-more-common-than-canonical-link
-
-relation with log-normal GLM:
-
-https://www.stat.purdue.edu/~chong/stat526/ps/glm_g.pdf
-
-# Random thoughts
-
-* link to log-log weight-length regressions
 
 # References
+
