@@ -1,0 +1,844 @@
+---
+title: "About Gamma Regression"
+author: "Tiago A. Marques"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: united
+    code_folding: hide
+  word_document:
+    toc: true
+  pdf_document:
+    toc: true
+csl: C:\\Users\\tam2\\Dropbox\\ctr\\mee.csl
+bibliography: C:\\Users\\tam2\\Dropbox\\ctr\\MainBibFile.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,options(scipen=999))
+library(MASS)
+library(knitr)
+```
+
+# Introduction
+
+In general, when thinking about modelling positive continuous values, most people except perhaps seasoned statisticians consider the Gaussian as a default. And there are many situations for which the Gaussian might be just enough, and you get the conventional lineart model and all the cool features that comes with it. However, if yout data corresponds to strictly positive numbers, you might happen to find that the Gaussian might not be enough. A particular aspect of the Gaussian model is that the variance is assumed to be constant, while you might have say variance increasing with the mean, or if you happen to make predictions which are negative when strictly values must be positive. Under such scenarios, Gamma regression can be a sensible alternative . However, when competing for popularity with the ubiquitous Gaussian regression, and to a couple discrete Generalize Linear Model (GLM) counterparts, like the Binomial (often logistic) and Poisson regressions, the Gamma gets relegated from the GLM podium. Together with the Beta regression, it corresponds to a lesser known family of distributions. While the Beta has been recently looked in detail by @Douma2019, a similar paper is lacking regarding Gamma regression. This intends to be said paper illustrating the uses of the Gamma regression in an ecological context.
+
+Continuous strictly positive data are ubiquitous in most sciences, in particular in ecology and evolution. Concentrations, weights, lengths, distances and speeds are just a handful of examples. These are often modeled with the standard linear model which assumed Gaussian residuals. If the mean response is not close to zero and the residuals are symmetric and homocedastic, that might be the preferred option. However, under many circumstances, especially for variables which have means close to zero, and hence are bounded close to their mean, the Gaussian will often prove unsuitable.
+
+In a Gamma GLM the linear predictor gives us the mean of a Gamma for a set of covariates. This is estimated correctly via the GLM maximum likelihood. However, it does not provide a maximum likelihood estimate (MLE) for the dispersion parameter. Nonetheless, the library `MASS` has a couple of functions that can be used over a GLM object to obtain MLE's for said parameter:
+
+* `gamma.shape` - estimates the shape parameter
+* `gamma.dispersion` - estimates the inverse of the shape parameter, that is, the dispersion parameter
+
+Here we consider the Gamma regression and provide recommendations about its use. That is of course if we manage to understand it. As it turns out, there is more than meets the eye behind the Gamma and how to parametrize it for a GLM. Therefore, before looking at their use in a GLM setting, we describe the diferent parametrizations that might be considered.
+
+# Gamma parametrizations
+
+The Gamma distribution corresponds to a continuous random variable with strictly positive support, parameterized by two parameters, usually referred as shape $\alpha$ and scale $\beta$ (note while some authors use $\sigma$ instead of $\beta$ for the scale, we prefer to use the $\beta$ for the scale so that we can use the $\sigma^2$ for the corresponding variance). The pdf of the Gamma is given by
+
+$$ f(x|\alpha,\beta)=\frac{x^{\alpha-1}e^{-{\frac{x}{\beta}}}}{\Gamma(\alpha) \beta^\alpha}$$
+where x>0, $\alpha>0$ and $\beta>0$. The function $\Gamma(.)$ is called the Gamma function and, if required, is implemented in R via function `gamma`. This corresponds to the so called shape-and-scale parametrization, arguably the most frequently used for the Gamma. In particular, the R `gamma` family functions, `dgamma`  for the density, `pgamma` for the probability density function, `qgamma` for the quantile function and `rgamma` for generating gamma pseudo-random deviates, the default parameters are the shape $\alpha$ and the scale $\beta$. 
+
+An interesting feature of the Gamma random variable is that the mean and variance are obtained directly from the parameters, as
+
+$$E(X)=\mu=\alpha \beta$$
+
+and
+
+$$var(X)=\sigma^2\ = \alpha \beta^2$$
+
+Note that these parameters induce a distribution for which the variance is a function of the mean, since now
+
+$$\sigma^2=\mu \beta$$
+
+and therefore, for a given shape $\alpha$, the variance will be larger than the mean provided that $\beta>1$ and lower than the mean if $\beta<1$. Usually it is stated that for the Gamma the variance is larger than the mean, and while that might often be the case, and perhaps the most useful case in a GLM, the above shows that it should be stated the variance can be higher than the mean, but that property is not a necessary condition in a Gamma. In general, the variance $\sigma^2$ of a Gamma will be a function of its mean $\mu$, but one can actually force the variance to be constant irrespective of the mean, as will be shown below.
+
+We can invert these expressions and represent the shape $\alpha$ and the scale $\beta$ as a function of the mean and the variance of the respective Gamma. We obtain the shape as
+
+$$ \alpha = \frac{\mu^2}{\sigma^2}$$
+
+and the scale as 
+
+$$ \beta = \frac{\sigma^2}{\mu}$$
+
+An usual re-parameterization is made in terms of a rate parameter $\lambda$, which corresponds to the inverse of the scale parameter, where $\lambda=1/\beta$. Just as the scale and rate are the inverse of each other, another parameter might be considered in the Gamma, the dispersion parameter, or $\phi$, and this corresponds to the inverse of the shape parameter ($\alpha=1/\phi$). This allows the representation of the mean as
+
+$$E(X)=\frac{\beta}{\phi}$$
+
+and we can also represent the variance of the Gamma as
+
+$$\sigma^2=\frac{\beta^2}{\phi}$$
+
+which as before implies
+
+$$\sigma^2=\mu \beta.$$
+
+Yet another paramterization that is often considerered is referred to as the mean-shape parameterization (https://stats.stackexchange.com/questions/247624/dispersion-parameter-for-gamma-family). 
+
+
+Here, we can define the shape to be $\frac{1}{\phi}$ and the scale to be $\mu \phi$, which leads to a mean 
+
+$$E(X)=\mu$$
+
+and variance
+
+$$\sigma^2=\mu^2 \phi.$$
+
+This latter parameterization is perhaps less familiar to researchers working with Gamma random variables, but it will be parameterization required for understanding a Gamma GLM. While the variance does not necessarily need to increase with the mean (e.g. $\mu<0$  and $\phi<0$), that might generically be the case and the most common case for Gamma GLMs.
+
+# Simulating Gamma data
+
+In practice, to simulate data from a Gamma with a given mean, as one would require if say for example one wanted either to (1) simulating data from a fitted GLM; or (2) to generate data to fit a GLM under a known reality scenario, one could actually envisage a few different approaches:
+
+1. data where variance depends on the mean
+2. data with constant variance
+3. data where we define a constant dispersion (and hence the variance depends on the mean squared)
+
+## Variance depends on the mean
+
+For the former we define the mean $\mu$ and a dispersion parameter $\phi$, and then we set the shape parameter to be $\mu \phi$ and the scale parameter as $\frac{1}{\phi}$ we obtained the desired gamma, with mean $\mu$ and a variance of $\frac{\mu}{\phi}$. Note that this induces a mean-variance relation as a function of the dispersion parameter $\phi$, for a given mean (just as before we saw one such mean-variance relation as a function of $\beta$, for a given shape $\alpha$): the variance will be greater than the mean if $\phi<1$ and lower than the mean if $\phi>1$.
+
+```{r}
+#define the dispersion parameters for my example below
+phi1 <- 0.2
+phi2 <- 2
+```
+
+As examples, consider Gammas with dispersion parameter $\phi_1$=`r phi1` and $\phi_2$=`r phi2`
+
+```{r}
+par(mfrow=c(2,2),mar = c(4, 4, 1, 4) + 0.3)
+#parameterization 1
+
+#generate gamma data
+set.seed(123)
+# define limits for predictor
+xsmin<- 10
+xsmax<-20
+#define sample size
+n<-10000
+#define number of points to predict
+npred<- 500
+#define points to predict later
+xspreds<-seq(xsmin,xsmax,length=npred)
+#generate predictor
+xs<-runif(n,xsmin,xsmax)
+#define intercept and slope for the libear predictor
+int<-0.1
+slope<-0.2
+#generate mean value of the response
+meang<-exp(int+slope*xs)
+
+#generate responses, from dispersion = 0.2
+ys<-rgamma(n,shape=meang*phi1,scale=1/phi1)
+dat<- data.frame(weight=ys,length=xs)
+#plot data
+plot(xs,ys)
+#add true line
+points(xspreds,exp(int+slope*xspreds),type="l",col="green",lwd=2)
+
+#shape and variance as a function of the mean, for dispersion=0.2
+shape <- meang*phi1
+var <- meang/phi1
+# Draw first plot using axis y1
+plot(ys, shape, pch = 1, col = 2,ylab="")  
+mtext("shape", side = 2, line = 3,col = 2)
+# set parameter new=True for a new axis
+par(new = TRUE)         
+# Draw second plot using axis y2
+plot(ys, var, pch = 4, col = 3, axes = FALSE, xlab = "", ylab = "")
+axis(side = 4, at = pretty(range(var)))      
+mtext("var", side = 4, line = 3,col = 3)
+
+#parameterization 2
+
+#dispersion=0.2
+#generate gamma data
+#generate responses
+ys<-rgamma(n,shape=meang*phi2,scale=1/phi2)
+dat<- data.frame(weight=ys,length=xs)
+#plot data
+plot(xs,ys)
+#add true line
+points(xspreds,exp(int+slope*xspreds),type="l",col="green",lwd=2)
+
+#shape and variance as a function of the mean, for dispersion=2
+shape <- meang*phi2
+var <- meang/phi2
+# Draw first plot using axis y1
+par(mar = c(4, 4, 1, 4) + 0.3)              
+plot(ys, shape, pch = 1, col = 2,ylab="")  
+mtext("shape", side = 2, line = 3,col = 2)
+# set parameter new=True for a new axis
+par(new = TRUE)         
+# Draw second plot using axis y2
+plot(ys, var, pch = 4, col = 3, axes = FALSE, xlab = "", ylab = "")
+axis(side = 4, at = pretty(range(var)))      
+mtext("var", side = 4, line = 3,col = 3)
+```
+
+Note that by fixing the mean and the dispersion, a given mean can be obtained via a range of different shape and scale parameters. In this example, as the mean increases both the shape and the variance increase, but while on the first case ($\phi_1=0.2$, top row), since $\phi_1$<1, the variance is larger than the mean, on the second case ($\phi_2=2$, bottom row) since $\phi_2$>1, the variance is lower than the mean.
+
+## Constant variance
+
+Given what I struggled with the gamma implementation for the sperm whale cue rate model, I actually arrived at another possible paramnetrization for the gama. One where the variance is not dependent on the mean.
+
+The way to parameterize a GLM might be to define the mean $\mu$ and the $\sigma^2$, resulting in dynamic values (since they depend now on both $\mu$ and $\sigma^2$) for $\alpha$ (shape) and $\beta$ (rate) parameters  $\frac{\mu^2}{\sigma^2}$ and $\frac{\mu}{\sigma^2}$, respectively.
+
+Using this parameterization, we end up with a gamma in which the variance is actually constant, hence it does not depend on the mean.
+
+```{r}
+#generate gamma data
+set.seed(123)
+#define the variance parameter
+vari <- 0.2
+# define limits for predictor
+xsmin<- 10
+xsmax<-20
+#define sample size
+n<-10000
+#define number of pointsto predict
+npred<- 500
+#define poiunt to predict later
+xspreds<-seq(xsmin,xsmax,length=npred)
+#generate predictor
+xs<-runif(n,xsmin,xsmax)
+#define intercept and slope for the libear predictor
+int<-0.1
+slope<-0.2
+#generate mean value of the response
+meang<-exp(int+slope*xs)
+#generate responses
+ys<-rgamma(n,shape=meang^2/vari,rate=meang/vari)
+
+dat<- data.frame(weight=ys,length=xs)
+
+#get the shape and rate parameters
+shape <- ys^2/vari
+rate <- ys/vari
+```
+
+Look at the data
+
+```{r}
+par(mfrow=c(1,1))
+
+par(mar = c(4, 4, 1, 4) + 0.3)     
+#plot data
+# Draw first plot using axis y1
+plot(xs,ys,xlab="xs",ylab="")
+#add true line
+points(xspreds,exp(int+slope*xspreds),type="l",col="green",lwd=2)
+         
+mtext("mean", side = 2, line = 3,col = "green")
+  
+# set parameter new=True for a new axis
+par(new = TRUE)         
+  
+# Draw second plot using axis y2
+plot(xs, shape*(1/rate)^2, pch = 15, col = "red", axes = FALSE, xlab = "", ylab = "")
+  
+axis(side = 4, at = pretty(range(0.1,0.3)))      
+mtext("var", side = 4, line = 3,col = "red")
+```
+
+As noted above, since the variance is kept constant, the shape and the rate parameters will vary as a function of the mean
+
+```{r}
+shape <- ys^2/vari
+rate <- ys/vari
+#plot(ys,shape)
+#points(ys,rate)
+
+# Draw first plot using axis y1
+par(mar = c(4, 4, 1, 4) + 0.3)              
+plot(ys, shape, pch = 13, col = 2,ylab="")  
+    
+mtext("shape", side = 2, line = 3,col = 2)
+  
+# set parameter new=True for a new axis
+par(new = TRUE)         
+  
+# Draw second plot using axis y2
+plot(ys, rate, pch = 15, col = 3, axes = FALSE, xlab = "", ylab = "")
+  
+axis(side = 4, at = pretty(range(rate)))      
+mtext("rate", side = 4, line = 3,col = 3)
+```
+
+This is NOT, however, how we parameterize the Gamma in a GLM.
+
+## Variance depends on mean squared
+
+To formulate a gamma GLM, we borrow on a gamma property shared by the lognormal. When the shape parameter is held constant while the scale parameter is varied, the variance is proportional to mean-squared. Note this also implies a constant coefficient of variation (https://stats.stackexchange.com/questions/67547/when-to-use-gamma-glms). Therefore, behind a gamma GLM we have a mean-shape parameterization, where the variance increases with mean squared and there is a constant dispersion (which is the same as to say a constant shape) parameter.
+
+```{r}
+
+# parameterization 3
+
+#dispersion=0.2
+#generate gamma data
+#generate responses
+ys<-rgamma(n,shape=1/phi1,scale=meang*phi1)
+dat<- data.frame(weight=ys,length=xs)
+#plot data
+plot(xs,ys)
+#add true line
+points(xspreds,exp(int+slope*xspreds),type="l",col="green",lwd=2)
+
+#shape and variance as a function of the mean, for dispersion=2
+shape <- rep(1/phi1,times=length(ys))
+var <- meang*phi1
+# Draw first plot using axis y1
+par(mar = c(4, 4, 1, 4) + 0.3)              
+plot(ys, shape, pch = 1, col = 2,ylab="")  
+mtext("shape", side = 2, line = 3,col = 2)
+# set parameter new=True for a new axis
+par(new = TRUE)         
+# Draw second plot using axis y2
+plot(ys, var, pch = 4, col = 3, axes = FALSE, xlab = "", ylab = "")
+axis(side = 4, at = pretty(range(var)))      
+mtext("var", side = 4, line = 3,col = 3)
+```
+
+# Using a Gamma GLM to fit a Gamma to data
+
+In a Gamma GLM we will have the response $X$ with a Gamma distribution and, assuming a single predictor for notation simplicity without loss of generality, 
+
+$$\eta [E(Y|X)] = \eta (\mu) = \beta_0+\beta_1 x_1.$$
+This formulation 
+
+which also means that 
+
+$$\mu = \eta^{-1}(\beta_0+\beta_1 x_1) $$
+
+```{r}
+m<-4
+v<-10
+```
+
+
+Based on observations of a Gamma, we can estimate the parameters of a gamma distribution, which is akin to fitting a gamma distribution to the data, using the `glm` function. This is essentially a regression model without any independent covariates.
+
+An example follows. Suppose we have a gamma with mean=`r m` and variance=`r v`. Given the above, that corresponds to a shape of `r round(m^2/v,2)`, a scale of `r round(v/m,2)`, a rate of `r round(m/v,2)` and a dispersion of `r round(v/m^2,2)`.
+
+```{r}
+#define sample size for simulation
+n<-5000
+```
+
+We simulate data, in this case `r n`  observations, fit the model and recover the parameters from `glm`. Note we consider here the `glm` link to be the identity
+
+```{r}
+set.seed(124)
+
+gammas<-rgamma(n,shape=m^2/v,scale=v/m)
+m1<-glm(gammas~1,family=Gamma(link="identity"))
+sm1<-summary(m1)
+sm1
+```
+
+```{r,echo=FALSE,eval=FALSE}
+#The estimated mean is given by the estimated intercept 
+sm1$coefficients[1]
+
+#the estimated dispersion is 
+sm1$dispersion
+#for which a better estimate will be obtained via `MASS:gamma.dispersion`
+gamma.dispersion(m1)
+
+#the estimated shape is the inverse of the dispersion
+1/sm1$dispersion
+#also better estimated as
+gamma.shape(m1)
+
+
+#and the scale is the mean divided by the shape
+sm1$coefficients[1]/(1/sm1$dispersion)
+
+#To recover the variance we use the residuals. 
+#The variance corresponds to the  sum of the squared residuals divided by the residual degrees of freedom:
+#note type response not needed, but easier to generalise
+sum(residuals(m1, type = "response")^2)/sm1$df.residual
+#Note that the residual deviance is just the sum of the squared deviance residuals. 
+sum(residuals(m1, type = "deviance")^2)
+```
+
+We compare true values and estimated values in the table below.
+
+```{r}
+#making a small printable data.frame for kable
+comp<-data.frame(parameter=c("mean","variance","shape","scale","dispersion","rate"),true=NA,estimated=NA)
+comp[,2]<-c(m,v,m^2/v,v/m,v/m^2,m/v)
+comp[,3]<-c(sm1$coefficients[1],sum(residuals(m1, type = "response")^2)/sm1$df.residual,as.numeric(gamma.shape(m1))[1],sm1$coefficients[1]/(1/sm1$dispersion),gamma.dispersion(m1),(1/sm1$dispersion)/sm1$coefficients[1])
+kable(comp,digits=2)
+```
+
+As expected given the sample size, all the parameter estimates are quite close to their true values.
+
+# Fitting gamma models
+
+We start by simulating data from a gamma model, with a log link, and then do the same with an inverse link. We compare the models fitted considering the correct link function and several alternatives (link functions used: log, inverse, identity).
+
+Note that the relation between the mean valueof the response $Y$  and the linear predictor $X$ are, for each of the link functions:
+
+* $\mathbf E(y|x)=exp(a+bx)$, in the case of the log link
+
+* $\mathbf E(y)=\frac{1}{a+bx}$ in the case of the inverse
+
+* $\mathbf E(y)=a+bx$, in the case of the  identity
+
+Note the formulation for the inverse link might induce confusion with the interpretation of the parameters in a Gamma GLM. An estimated negative value for the slope induces a positive relation between the predictor and the response, and vice versa.
+
+## Log-link
+
+We generate data from a log-link, and we then fit models with the log-link, but also the inverse and identity links for comparison.
+
+Simulate data, via first option
+
+```{r}
+#generate gamma data
+set.seed(123)
+#define the dispersion parameter
+p1 <- 0.2
+# define limits for predictor
+xsmin<- 10
+xsmax<-20
+#define sample size
+n<-10000
+#define number of pointsto predict
+npred<- 500
+#define poiunt to predict later
+xspreds<-seq(xsmin,xsmax,length=npred)
+#generate predictor
+xs<-runif(n,xsmin,xsmax)
+#define intercept and slope for the libear predictor
+int<-0.1
+slope<-0.2
+#generate mean value of the response
+meang<-exp(int+slope*xs)
+#generate responses
+ys<-rgamma(n,shape=1/p1,scale=meang*p1)
+
+dat<- data.frame(weight=ys,length=xs)
+```
+
+Look at the data
+
+```{r}
+#plot data
+plot(xs,ys)
+#add true line
+points(xspreds,exp(int+slope*xspreds),type="l",col="green",lwd=2)
+```
+
+
+Fit different models, the correct link, the log link
+
+```{r}
+#fit gamma
+glm1<-glm(weight~length,family=Gamma(link="log"),data=dat)
+summary(glm1)
+```
+
+Note that we simulated data considering a $\beta_0$, $\beta_1$ and dispersion parameter for the gamma to be respectively `r int`, `r slope` and `r p1` and we estimate these to be `r round(summary(glm1)$coefficients[1,1],3)` (se=`r round(summary(glm1)$coefficients[1,2],3)`), `r round(summary(glm1)$coefficients[2,1],3)` (se=`r round(summary(glm1)$coefficients[2,2],3)`) and `r round(summary(glm1)$dispersion,3)`, respectively. These results are quite close to the truth, as expected given the large sample size (n=`r n`).
+
+What would happen if we fitted with the wrong link function? Suppose we consider the (canonical for the Gamma) inverse link function. The we get this
+
+```{r,fitwrong1}
+#fit gamma, INVERSE
+glm2<-glm(weight~length,family=Gamma(link="inverse"),data=dat)
+summary(glm2)
+```
+
+We estimate the parameters to be `r round(summary(glm2)$coefficients[1,1],3)` (se=`r round(summary(glm2)$coefficients[1,2],3)`), `r round(summary(glm2)$coefficients[2,1],3)` (se=`r round(summary(glm2)$coefficients[2,2],3)`) and `r round(summary(glm2)$dispersion,3)`, respectively. Note that even if the predicted function will try to fit the data, the parameter estimates become quite different from the true values, except for the estimated dispersion. In particular, notice how the coeficient associated with the predictor has changed signs!
+
+If one considered the identity link instead
+
+```{r,fitwrong2}
+#fit gamma, IDENTITY
+glm3<-glm(weight~length,family=Gamma(link="identity"),data=dat,start=c(0.1,0.2))
+summary(glm3)
+```
+
+We estimate the parameters to be `r round(summary(glm3)$coefficients[1,1],3)` (se=`r round(summary(glm3)$coefficients[1,2],3)`), `r round(summary(glm3)$coefficients[2,1],3)` (se=`r round(summary(glm3)$coefficients[2,2],3)`) and `r round(summary(glm3)$dispersion,3)`, respectively. As for the inverse-link, the parameter estimates become quite different from the true values, except still for the estimated dispersion.
+
+Look at all the different models fitted considering different link-functions against the true data generating model
+
+```{r}
+plot(xs,ys,xlim=c(2,20))
+xspreds<-seq(2,xsmax,length=npred)
+#add true line
+points(xspreds,exp(int+slope*xspreds),type="l",col="green",lwd=2)
+# CORRECT LOG LINK
+preds<-predict(glm1,newdata = data.frame(length=xspreds),type="response")
+#add fitted values
+points(xspreds,preds,type="l",col="blue",lwd=2,lty=2)
+# INVERSE LINK
+preds<-predict(glm2,newdata = data.frame(length=xspreds),type="response")
+#add fitted values
+points(xspreds,preds,type="l",col="red",lwd=2,lty=2)
+# IDENTITY LINK
+preds<-predict(glm3,newdata = data.frame(length=xspreds),type="response")
+#add fitted values
+points(xspreds,preds,type="l",col="orange",lwd=2,lty=2)
+legend("topleft",legend=c("True (log-link)","log link","inverse","identity"),col=c("green","blue","red","orange"),lty=c(1,2,2,2),inset=0.05)
+```
+
+Note the above image illustrates clearly that it is the link function, not the distribution family, that constrains predictions to be strictly positive. Using the identity link we can easily get negative predictions : for say `xs`=2, we predict `r round(predict(glm1,newdata = data.frame(length=2),type="response"),2)`, `r round(predict(glm2,newdata = data.frame(length=2),type="response"),2)` and `r round(predict(glm3,newdata = data.frame(length=2),type="response"),2)` for the log, the inverse and the identity link functions, respectively.
+
+Another thought comes to mind. The link function considered induces quite strong constraints on the predictions. Above, the predictions from the inverse link-function are far off compared to the observed data, overestimating the mean value for large values of the predictor, while the opposite happens for the identity link.
+
+The AIC for the models are
+
+```{r}
+AIC(glm1,glm2,glm3)
+```
+
+and reassuringly, if we chose the best model based on AIC, the true model would be the model selected by far.
+
+## Inverse link 1
+
+When we consider an inverse link for the gamma, we must be quite careful with the choice of parameters, as some lead to inadmissible values. That in itself is a matter for concern, because it hints for the fact that we could have issues when predicting?
+
+```{r}
+#generate gamma data
+set.seed(123)
+#define the dispersion parameter
+p1 <- 0.5
+# define limits for predictor
+xsmin<- 10
+xsmax<-200
+#define sample size
+n<-10000
+#define number of points to predict
+npred<- 500
+#generate predictor
+xs<-runif(n,xsmin,xsmax)
+#define intercept and slope for the linear predictor
+int<-1.1
+slope<-1.4
+#generate mean value of the response
+meang<- (1/(int+slope*xs))
+#generate responses
+ys<-rgamma(n,shape=1/p1,scale=meang*p1)
+
+dat<- data.frame(weight=ys,length=xs)
+#plot data
+xspreds<-seq(xsmin,xsmax,length=npred)
+plot(xs,ys)
+
+#fit gamma
+glm1.i<-glm(weight~length,family=Gamma(link="inverse"),data=dat)
+summary(glm1.i)
+```
+
+Here we consider an example where the intercept was `r int`, the slope was `r slope` and the dispersions was `r p1`. Note how the estimated values of the coefficients of the linear predictor is positive, but the effect of `xs` on the response is decreasing. This actually means care is needed when interpreting the values. I have seen folks stating as x increases y increases because they fitted a Gamma (with the default link, which is the inverse), when it should be the opposite (would be great to find an example in a paper).
+
+Considering the true link function all the parameters are, not surprisingly, correctly estimated. The estimated dispersion parameter matches perfectly with the true value (estimated at `r round(summary(glm1.i)$dispersion,3)` vs. true value of `r p1`). 
+
+What happens when we consider a different link function? We experiment first with the log-link
+
+```{r,fitwrongi1}
+#fit gamma, INVERSE
+glm2<-glm(weight~length,family=Gamma(link="log"),data=dat)
+summary(glm2)
+```
+
+and then with the identity link.
+
+```{r,fitwrongi2,warning=FALSE}
+#fit gamma, IDENTITY
+glm3<-glm(weight~length,family=Gamma(link="identity"),data=dat,start=c(0.1,0.2))
+summary(glm3)
+```
+
+In particular, a number of warnings (muted in the output) are generated during model fitting with the identity link, possibly indicating that the model is making inadmissible predictions. Comparing all the results, we observe something analogous to what we found before.
+
+```{r}
+plot(xs,ys,xlim=c(0,400))
+#plot data
+xspreds<-seq(xsmin,400,length=npred)
+#add true line
+points(xspreds,(1/(int+slope*xspreds)),type="l",col="green",lwd=2)
+
+preds<-predict(glm1.i,newdata = data.frame(length=xspreds),type="response")
+#add fitted values
+points(xspreds,preds,type="l",col="blue",lwd=2,lty=2)
+# IDENTITY LINK
+preds<-predict(glm2,newdata = data.frame(length=xspreds),type="response")
+#add fitted values
+points(xspreds,preds,type="l",col="red",lwd=2,lty=2)
+# IDENTITY LINK
+preds<-predict(glm3,newdata = data.frame(length=xspreds),type="response")
+#add fitted values
+points(xspreds,preds,type="l",col="orange",lwd=2,lty=2)
+legend("topright",legend=c("True (inverse)","inverse","log","identity"),col=c("green","blue","red","orange"),lty=c(1,2,2,2),inset=0.05)
+
+```
+
+Considering the wrong link functions, the estimated dispersion parameter also bears no resemblance with the true value, estimated at `r round(summary(glm2)$dispersion,3)` for the log link and `r round(summary(glm3)$dispersion,3)` for the identity link vs. true value of `r p1` (recall from above that we estimated the dispersion parameters to be  `r round(summary(glm1.i)$dispersion,3)` for the true inverse link). Therefore, like for the log-link function generated data, here for the inverse link the estimated dispersion changes depending on the link function considered. The same comment as above applies: the link function considered induces quite strong constraints on the predictions. 
+
+
+## Inverse link 2
+
+When we consider still an inverse link for the gamma, but with the response being an increasing function of the predictor
+
+```{r}
+#generate gamma data
+set.seed(123)
+#define the dispersion parameter
+p1 <- 0.015
+# define limits for predictor
+xsmin<- 10
+xsmax<-200
+#define sample size
+n<-10000
+#define number of points to predict
+npred<- 500
+#generate predictor
+xs<-runif(n,xsmin,xsmax)
+#define intercept and slope for the linear predictor
+int<-14
+slope<--0.05
+#generate mean value of the response
+meang<- (1/(int+slope*xs))
+#generate responses
+ys<-rgamma(n,shape=1/p1,scale=meang*p1)
+
+dat<- data.frame(weight=ys,length=xs)
+#plot data
+xspreds<-seq(xsmin,xsmax,length=npred)
+plot(xs,ys)
+
+#fit gamma
+glm1.i<-glm(weight~length,family=Gamma(link="inverse"),data=dat)
+summary(glm1.i)
+```
+
+Here we consider an example where the intercept was `r int`, the slope was `r slope` and the dispersion was `r p1`. Note how the value of the slope coefficient of the linear predictor is the inverse (negative) of the trend (positive, y increases with x). This actually means care is needed when interpreting the output of a Gamma with the canonical link function. I have seen folks stating as x increases y increases because they fitted a Gamma (with the default link, which is the inverse), when it should be the opposite (would be great to find an example in a paper). While in a univariate context this would be hard to imagine, since most people would actually plot the data and hence see there was something off with the interpretation of the coefficients, in the case of multiple regression with several explanatory covariates, where plotting is harder, this could happen and incorrect inferences reported based on the sign of the coefficients.
+
+```{r,fitwrongi1r}
+#fit gamma, INVERSE
+glm2<-glm(weight~length,family=Gamma(link="log"),data=dat)
+summary(glm2)
+```
+
+```{r,fitwrongi2r}
+#fit gamma, IDENTITY
+glm3<-glm(weight~length,family=Gamma(link="identity"),data=dat,start=c(0.1,0.2))
+summary(glm3)
+```
+
+```{r}
+plot(xs,ys,xlim=c(0,400))
+#plot data
+xspreds<-seq(xsmin,400,length=npred)
+#add true line
+points(xspreds,(1/(int+slope*xspreds)),type="l",col="green",lwd=2)
+
+preds<-predict(glm1.i,newdata = data.frame(length=xspreds),type="response")
+#add fitted values
+points(xspreds,preds,type="l",col="blue",lwd=2,lty=2)
+# IDENTITY LINK
+preds<-predict(glm2,newdata = data.frame(length=xspreds),type="response")
+#add fitted values
+points(xspreds,preds,type="l",col="red",lwd=2,lty=2)
+# IDENTITY LINK
+preds<-predict(glm3,newdata = data.frame(length=xspreds),type="response")
+#add fitted values
+points(xspreds,preds,type="l",col="orange",lwd=2,lty=2)
+legend("topright",legend=c("True (inverse)","inverse","log","identity"),col=c("green","blue","red","orange"),lty=c(1,2,2,2),inset=0.05)
+
+```
+
+The same comment as above applies: the link function considered induces quite strong constraints on the predictions. 
+
+Note something quite interesting that can lead to issues in real life. The true mean of the response tends to +Inf as $xs$ tends to 280, and tend to -Inf as one approaches xs 180 from the higher values. I have seen this causing real life issues in predictions, but can't quite remember where.
+
+Here's an example
+
+```{r}
+#generate gamma data
+set.seed(123)
+#define the dispersion parameter
+p1 <- 0.015
+# define limits for predictor
+xsmin<- 270
+xsmax<-276
+#define sample size
+n<-10000
+#define number of points to predict
+npred<- 500
+#generate predictor
+xs<-runif(n,xsmin,xsmax)
+#define intercept and slope for the linear predictor
+int<-14
+slope<--0.05
+#generate mean value of the response
+meang<- (1/(int+slope*xs))
+#generate responses
+ys<-rgamma(n,shape=1/p1,scale=meang*p1)
+
+dat<- data.frame(weight=ys,length=xs)
+#plot data
+xspreds<-seq(xsmin,xsmax,length=npred)
+plot(xs,ys)
+
+#fit gamma
+glm1.i<-glm(weight~length,family=Gamma(link="inverse"),data=dat)
+summary(glm1.i)
+
+#fit gamma, INVERSE
+glm2<-glm(weight~length,family=Gamma(link="log"),data=dat)
+summary(glm2)
+
+
+#fit gamma, IDENTITY
+glm3<-glm(weight~length,family=Gamma(link="identity"),data=dat,start=c(0.1,0.2))
+summary(glm3)
+
+par(mfrow=c(1,2))
+
+plot(xs,ys,xlim=c(0,1000),ylim=c(0,10))
+#plot data
+#add true line
+xspreds<-seq(0,1000,length=npred)
+points(xspreds,(1/(int+slope*xspreds)),type="l",col="green",lwd=2)
+
+preds<-predict(glm1.i,newdata = data.frame(length=xspreds),type="response")
+#add fitted values
+points(xspreds,preds,type="l",col="blue",lwd=2,lty=2)
+# IDENTITY LINK
+preds<-predict(glm2,newdata = data.frame(length=xspreds),type="response")
+#add fitted values
+points(xspreds,preds,type="l",col="red",lwd=2,lty=2)
+# IDENTITY LINK
+preds<-predict(glm3,newdata = data.frame(length=xspreds),type="response")
+#add fitted values
+points(xspreds,preds,type="l",col="orange",lwd=2,lty=2)
+legend("topright",legend=c("True (inverse)","inverse","log","identity"),col=c("green","blue","red","orange"),lty=c(1,2,2,2),inset=0.05)
+
+
+plot(xs,ys,xlim=c(270,280),ylim=c(0,10))
+#plot data
+#add true line
+xspreds<-seq(270,280,length=npred)
+points(xspreds,(1/(int+slope*xspreds)),type="l",col="green",lwd=2)
+
+preds<-predict(glm1.i,newdata = data.frame(length=xspreds),type="response")
+#add fitted values
+points(xspreds,preds,type="l",col="blue",lwd=2,lty=2)
+# IDENTITY LINK
+preds<-predict(glm2,newdata = data.frame(length=xspreds),type="response")
+#add fitted values
+points(xspreds,preds,type="l",col="red",lwd=2,lty=2)
+# IDENTITY LINK
+preds<-predict(glm3,newdata = data.frame(length=xspreds),type="response")
+#add fitted values
+points(xspreds,preds,type="l",col="orange",lwd=2,lty=2)
+legend("topright",legend=c("True (inverse)","inverse","log","identity"),col=c("green","blue","red","orange"),lty=c(1,2,2,2),inset=0.05)
+
+```
+ 
+# A comparison for illustration with real data
+
+For illustration, we consider the well known data cars from R package MASS
+
+```{r}
+data(cars)
+plot(cars$speed~cars$dist)
+
+lm1<-lm(speed~dist,data=cars)
+abline(lm1,col="blue",lty=2,lwd=2)
+
+
+glm2<- glm(speed~dist,data=cars,family=Gamma(link="log"))
+#just to illustrate abline can't be used with a glm object
+#abline(glm2,col="green")
+
+
+seqxs <- 0:120
+preds<-predict(glm2,newdata = data.frame(dist=seqxs),type="response")
+points(seqxs,preds,col="red",type="l",lty=2,lwd=2)
+
+
+glm3<- glm(speed~dist,data=cars,family=Gamma(link="inverse"))
+preds<-predict(glm3,newdata = data.frame(dist=seqxs),type="response")
+points(seqxs,preds,col="grey",type="l",lty=2,lwd=2)
+
+glm4<- glm(speed~dist,data=cars,family=Gamma(link="identity"))
+preds<-predict(glm4,newdata = data.frame(dist=seqxs),type="response")
+points(seqxs,preds,col="pink",type="l",lty=2,lwd=2)
+
+library(mgcv)
+gam1<- gam(speed~s(dist),data=cars,family=Gamma(link="log"))
+preds<-predict(gam1,newdata = data.frame(dist=seqxs),type="response")
+points(seqxs,preds,col="orange",type="l",lty=2,lwd=2)
+
+legend("bottomright",legend=c("lm","Gamma log link","Gamma inverse link","Gamma identity link","gam"),col=c("blue","red","grey","pink","orange"),lty=c(2,2,2,2,2),lwd=2,inset=0.05)
+```
+
+For comparison, the AIC of all models
+
+```{r}
+AIC(lm1,glm2,glm3,glm4,gam1)
+```
+
+Compare the summary of the log link
+
+```{r}
+summary(glm4)
+```
+
+with the inverse link
+ 
+```{r}
+summary(glm3)
+```
+
+# Resources to explore
+
+Should read this:
+
+https://data.library.virginia.edu/getting-started-with-gamma-regression/ - very nice resource but, it states "If you look carefully at the variance, you’ll notice it’s the mean multiplied by the scale parameter. In other words, the variance is a function of the mean. A gamma distribution with a higher mean will have higher variance.". As we have seen above, this is not the case. If the scale $\beta<1$, the variance could be lower than the mean. Here follows an example for illustration where a given gamma has variance lower than the mean
+
+```{r}
+dados<-rgamma(1000,shape=3,scale=0.4)
+mean(dados)
+var(dados)
+```
+
+But can one cook up an example of a regression where the variance decreases with the mean? I could not, actually... and that is because in a regression context, the variance can be lower than the mean, but it must increase with the mean.
+
+https://rpubs.com/jwesner/gamma_glm
+
+And also these:
+
+https://stats.stackexchange.com/questions/77579/log-linked-gamma-glm-vs-log-linked-gaussian-glm-vs-log-transformed-lm
+
+https://stats.stackexchange.com/questions/47840/linear-model-with-log-transformed-response-vs-generalized-linear-model-with-log
+
+http://faculty.washington.edu/heagerty/Courses/b571/homework/Lindsey-Jones-1998.pdf
+
+https://data.library.virginia.edu/getting-started-with-gamma-regression/
+
+
+about the inverse link:
+
+https://stats.stackexchange.com/questions/202570/link-function-in-a-gamma-distribution-glm
+
+https://stats.stackexchange.com/questions/484366/gamma-glm-why-log-link-is-more-common-than-canonical-link
+
+relation with log-normal GLM:
+
+https://www.stat.purdue.edu/~chong/stat526/ps/glm_g.pdf
+
+# Random thoughts
+
+* link to log-log weight-length regressions
+
+# References
