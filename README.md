@@ -9,7 +9,7 @@ Some reources to explor further check if improving this material at some point.
 
 * https://rpubs.com/jwesner/gamma_glm - Fit and interpret a Bayesian Generalized Linear Model with a Gamma likelihood in `brms()`, by Jeff Wesner. Very nice worked example
 
-https://seananderson.ca/2014/04/08/gamma-glms/ - A nice intro by https://seananderson.ca/. One should never forget: "There are multiple ways to parameterize the Gamma distribution, so it’s important to pay attention when moving between languages and functions."
+* https://seananderson.ca/2014/04/08/gamma-glms/ - A nice intro by https://seananderson.ca/. One should never forget: "There are multiple ways to parameterize the Gamma distribution, so it’s important to pay attention when moving between languages and functions."
 
 * about link functions in the Gamma, see https://stats.stackexchange.com/questions/202570/link-function-in-a-gamma-distribution-glm and https://stats.stackexchange.com/questions/484366/gamma-glm-why-log-link-is-more-common-than-canonical-link
 
